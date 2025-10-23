@@ -28,68 +28,73 @@ def parserInputString [Monad m] [MonadFileMap m] (str : TSyntax `str) : m String
   while !iter.atEnd do
     if iter.curr == '\n' then code := code.push '\n'
     else
-      for _ in [0:iter.curr.utf8Size.toNat] do
+      for _ in [0:iter.curr.utf8Size] do
         code := code.push ' '
     iter := iter.next
   code := code ++ str.getString
   return code
 
+def processString (altStr : String) :  DocElabM (Array (TSyntax `term)) := do
+
+  let ictx := Parser.mkInputContext altStr (← getFileName)
+  let cctx : Command.Context := { fileName := ← getFileName, fileMap := FileMap.ofString altStr, cancelTk? := none, snap? := none}
+  let mut cmdState : Command.State := {env := ← getEnv, maxRecDepth := ← MonadRecDepth.getMaxRecDepth, scopes := [{header := ""}, {header := ""}]}
+  let mut pstate := {pos := 0, recovering := false}
+  let mut exercises := #[]
+  let mut solutions := #[]
+
+  repeat
+    let scope := cmdState.scopes.head!
+    let pmctx := { env := cmdState.env, options := scope.opts, currNamespace := scope.currNamespace, openDecls := scope.openDecls }
+    let (cmd, ps', messages) := Parser.parseCommand ictx pmctx pstate cmdState.messages
+    pstate := ps'
+    cmdState := {cmdState with messages := messages}
+
+    -- dbg_trace "Unsliced is {cmd}"
+    let slices : Slices ← DocElabM.withFileMap (FileMap.ofString altStr) (sliceSyntax cmd)
+    let sol := slices.sliced.getD "solution" slices.residual
+    solutions := solutions.push sol
+    -- let ex := slices.sliced.getD "exercise" slices.residual
+    -- exercises := exercises.push ex
+
+    cmdState ← withInfoTreeContext (mkInfoTree := pure ∘ InfoTree.node (.ofCommandInfo {elaborator := `DemoTextbook.Exts.lean, stx := cmd})) do
+      let mut cmdState := cmdState
+      -- dbg_trace "Elaborating {ex}"
+      -- match (← liftM <| EIO.toIO' <| (Command.elabCommand ex cctx).run cmdState) with
+      -- | Except.error e => logError e.toMessageData
+      -- | Except.ok ((), s) =>
+      --   cmdState := {s with env := cmdState.env}
+
+      -- dbg_trace "Elaborating {sol}"
+      match (← liftM <| EIO.toIO' <| (Command.elabCommand sol cctx).run cmdState) with
+      | Except.error e => logError e.toMessageData
+      | Except.ok ((), s) =>
+        cmdState := s
+
+      pure cmdState
+
+    if Parser.isTerminalCommand cmd then break
+
+  setEnv cmdState.env
+  for t in cmdState.infoState.trees do
+    -- dbg_trace (← t.format)
+    pushInfoTree t
+
+  for msg in cmdState.messages.msgs do
+    logMessage msg
+
+  let mut hls := Highlighted.empty
+  for cmd in exercises do
+    hls := hls ++ (← highlight cmd cmdState.messages.msgs.toArray cmdState.infoState.trees)
+
+  pure #[]
+
+
 @[code_block_expander lean]
 def lean : CodeBlockExpander
   | _, str => do
     let altStr ← parserInputString str
-
-    let ictx := Parser.mkInputContext altStr (← getFileName)
-    let cctx : Command.Context := { fileName := ← getFileName, fileMap := FileMap.ofString altStr, tacticCache? := none, snap? := none}
-    let mut cmdState : Command.State := {env := ← getEnv, maxRecDepth := ← MonadRecDepth.getMaxRecDepth, scopes := [{header := ""}, {header := ""}]}
-    let mut pstate := {pos := 0, recovering := false}
-    let mut exercises := #[]
-    let mut solutions := #[]
-
-    repeat
-      let scope := cmdState.scopes.head!
-      let pmctx := { env := cmdState.env, options := scope.opts, currNamespace := scope.currNamespace, openDecls := scope.openDecls }
-      let (cmd, ps', messages) := Parser.parseCommand ictx pmctx pstate cmdState.messages
-      pstate := ps'
-      cmdState := {cmdState with messages := messages}
-
-      -- dbg_trace "Unsliced is {cmd}"
-      let slices : Slices ← DocElabM.withFileMap (FileMap.ofString altStr) (sliceSyntax cmd)
-      let sol := slices.sliced.findD "solution" slices.residual
-      solutions := solutions.push sol
-      let ex := slices.sliced.findD "exercise" slices.residual
-      exercises := exercises.push ex
-
-      cmdState ← withInfoTreeContext (mkInfoTree := pure ∘ InfoTree.node (.ofCommandInfo {elaborator := `DemoTextbook.Exts.lean, stx := cmd})) do
-        let mut cmdState := cmdState
-        -- dbg_trace "Elaborating {ex}"
-        match (← liftM <| EIO.toIO' <| (Command.elabCommand ex cctx).run cmdState) with
-        | Except.error e => logError e.toMessageData
-        | Except.ok ((), s) =>
-          cmdState := {s with env := cmdState.env}
-
-        -- dbg_trace "Elaborating {sol}"
-        match (← liftM <| EIO.toIO' <| (Command.elabCommand sol cctx).run cmdState) with
-        | Except.error e => logError e.toMessageData
-        | Except.ok ((), s) =>
-          cmdState := s
-
-        pure cmdState
-
-      if Parser.isTerminalCommand cmd then break
-
-    setEnv cmdState.env
-    for t in cmdState.infoState.trees do
-      -- dbg_trace (← t.format)
-      pushInfoTree t
-
-    for msg in cmdState.messages.msgs do
-      logMessage msg
-
-    let mut hls := Highlighted.empty
-    for cmd in exercises do
-      hls := hls ++ (← highlight cmd cmdState.messages.msgs.toArray cmdState.infoState.trees)
-    pure #[]
+    processString altStr
 
 def VersoProofFlow.Block.math : Block where
   name := `VersoProofFlow.Block.math
