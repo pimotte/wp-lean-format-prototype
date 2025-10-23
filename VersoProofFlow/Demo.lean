@@ -4,7 +4,7 @@ set_option pp.rawOnError true
 
 #doc (VersoProofFlow) "ProofFlow Demo!" =>
 
-:::collapsible
+<hint title="Hint block">
 #Collapsible block for imports
 Placeholder text
 ```lean
@@ -14,10 +14,9 @@ def five : Nat := 5
 -- Define five as 5
 def wrongfive : Nat := 6
 ```
+</hint>
 
-:::
 # Correct Proof
-:::input
 .
 
 ```lean
@@ -28,24 +27,18 @@ theorem five_eq_5 : five = 5 := by
 
   rfl
 ```
-:::
 
+# Exercise with reference solution
 :::multilean
-
 ```lean
 -- Prove that five equals 5
 theorem five_eq_5' : five = 5 := by
-  have : True := by
-    trivial
-  rfl
 ```
-# hi
-
+<input-area>
 ```lean
-theorem five_eq_5'' : five = 5 := by
   have : True := by
     trivial
   rfl
 ```
+</input-area>
 :::
-

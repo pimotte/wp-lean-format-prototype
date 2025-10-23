@@ -138,7 +138,7 @@ def extractString (stxs : Array Syntax) : DocElabM (String) := do
         else
           for _ in [0:iter.curr.utf8Size] do
             code := code.push ' '
-            iter := iter.next
+        iter := iter.next
 
       lastIdx := contents.raw.getTailPos?.getD lastIdx
       code := (code ++ contents.getString)
