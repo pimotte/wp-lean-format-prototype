@@ -35,7 +35,7 @@ def parserInputString [Monad m] [MonadFileMap m] (str : TSyntax `str) : m String
   return code
 
 def processString (altStr : String) :  DocElabM (Array (TSyntax `term)) := do
-
+  dbg_trace "Processing {altStr}"
   let ictx := Parser.mkInputContext altStr (← getFileName)
   let cctx : Command.Context := { fileName := ← getFileName, fileMap := FileMap.ofString altStr, cancelTk? := none, snap? := none}
   let mut cmdState : Command.State := {env := ← getEnv, maxRecDepth := ← MonadRecDepth.getMaxRecDepth, scopes := [{header := ""}, {header := ""}]}
@@ -124,16 +124,42 @@ def VersoProofFlow.Block.multilean : Block where
   name := `VersoProofFlow.Block.multilean
   id := "multilean"
 
-@[directive_expander collapsible]
+def extractString (stxs : Array Syntax) : DocElabM (String) := do
+  let mut code := ""
+  let mut lastIdx := 0
+  for stx in stxs do
+    match stx with
+    | `(block|``` $_nameStx:ident $_argsStx* | $contents:str ```) => do
+      let preString := (← getFileMap).source.extract lastIdx (contents.raw.getPos?.getD 0)
+      let mut iter := preString.iter
+      while !iter.atEnd do
+        if iter.curr == '\n' then
+          code := code.push '\n'
+        else
+          for _ in [0:iter.curr.utf8Size] do
+            code := code.push ' '
+            iter := iter.next
+
+      lastIdx := contents.raw.getTailPos?.getD lastIdx
+      code := (code ++ contents.getString)
+    | _ => pure ()
+  pure code
+    -- stxs.foldlM (fun str syn =>
+    --   match syn with
+    --   | `(block|``` $_nameStx:ident $_argsStx* | $contents:str ```) =>
+    --     pure (str ++ contents.getString)
+    --   | b => pure ""
+  -- ) ""
+@[directive_expander multilean]
 def multilean : DirectiveExpander
   | #[], stxs => do
-    let args ← stxs.mapM elabBlock
-    let val ← ``(Block.other VersoProofFlow.Block.multilean #[ $[ $args ],* ])
+    let str ← extractString stxs
+    let val ← processString str
+    -- let args ← stxs.mapM elabBlock
+    let val ← ``(Block.other VersoProofFlow.Block.multilean #[])
     pure #[val]
   | _, _ => Lean.Elab.throwUnsupportedSyntax
 
-
-#check multilean
 def VersoProofFlow.Block.input : Block where
   name := `VersoProofFlow.Block.input
   id := "input"

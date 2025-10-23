@@ -29,3 +29,23 @@ theorem five_eq_5 : five = 5 := by
   rfl
 ```
 :::
+
+:::multilean
+
+```lean
+-- Prove that five equals 5
+theorem five_eq_5' : five = 5 := by
+  have : True := by
+    trivial
+  rfl
+```
+# hi
+
+```lean
+theorem five_eq_5'' : five = 5 := by
+  have : True := by
+    trivial
+  rfl
+```
+:::
+
