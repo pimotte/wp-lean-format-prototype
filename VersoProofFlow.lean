@@ -54,18 +54,9 @@ def processString (altStr : String) :  DocElabM (Array (TSyntax `term)) := do
     let slices : Slices ← DocElabM.withFileMap (FileMap.ofString altStr) (sliceSyntax cmd)
     let sol := slices.sliced.getD "solution" slices.residual
     solutions := solutions.push sol
-    -- let ex := slices.sliced.getD "exercise" slices.residual
-    -- exercises := exercises.push ex
 
     cmdState ← withInfoTreeContext (mkInfoTree := pure ∘ InfoTree.node (.ofCommandInfo {elaborator := `DemoTextbook.Exts.lean, stx := cmd})) do
       let mut cmdState := cmdState
-      -- dbg_trace "Elaborating {ex}"
-      -- match (← liftM <| EIO.toIO' <| (Command.elabCommand ex cctx).run cmdState) with
-      -- | Except.error e => logError e.toMessageData
-      -- | Except.ok ((), s) =>
-      --   cmdState := {s with env := cmdState.env}
-
-      -- dbg_trace "Elaborating {sol}"
       match (← liftM <| EIO.toIO' <| (Command.elabCommand sol cctx).run cmdState) with
       | Except.error e => logError e.toMessageData
       | Except.ok ((), s) =>
@@ -144,18 +135,14 @@ def extractString (stxs : Array Syntax) : DocElabM (String) := do
       code := (code ++ contents.getString)
     | _ => pure ()
   pure code
-    -- stxs.foldlM (fun str syn =>
-    --   match syn with
-    --   | `(block|``` $_nameStx:ident $_argsStx* | $contents:str ```) =>
-    --     pure (str ++ contents.getString)
-    --   | b => pure ""
-  -- ) ""
 @[directive_expander multilean]
 def multilean : DirectiveExpander
   | #[], stxs => do
     let str ← extractString stxs
     let val ← processString str
-    -- let args ← stxs.mapM elabBlock
+    -- let args ← stxs.mapM elabBlocko
+    -- Note that we do not actually pass any of the content here
+    -- To produce output, this would be needed.
     let val ← ``(Block.other VersoProofFlow.Block.multilean #[])
     pure #[val]
   | _, _ => Lean.Elab.throwUnsupportedSyntax
